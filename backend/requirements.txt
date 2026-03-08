@@ -1,0 +1,6 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+docker==7.1.0
+psutil==6.1.1
+sse-starlette==2.2.1
+aiofiles==24.1.0

@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Status Monitor — anosha.online</title>
+  <link rel="stylesheet" href="https://unpkg.com/xp.css" />
+  <style>
+    :root {
+      --ok: #4caf50;
+      --warn: #ff9800;
+      --err: #f44336;
+      --muted: #888;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #3a6ea5;
+      font-family: "Pixelated MS Sans Serif", Arial, sans-serif;
+      min-height: 100vh;
+    }
+    /* Desktop grid */
+    .desktop {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .desktop .window { margin: 0; }
+    .full-width { grid-column: 1 / -1; }
+    /* Window sizing */
+    .window { width: 100%; }
+    .window .window-body { padding: 8px; overflow: auto; }
+
+    /* Status dots */
+    .dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .dot-ok   { background: var(--ok); }
+    .dot-warn { background: var(--warn); }
+    .dot-err  { background: var(--err); }
+    .dot-muted { background: var(--muted); }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat-item label {
+      display: block;
+      font-size: 11px;
+      margin-bottom: 2px;
+      color: #333;
+    }
+    .stat-item .stat-value {
+      font-size: 11px;
+      color: #555;
+      margin-top: 2px;
+    }
+    .stat-item progress { width: 100%; }
+
+    /* Temps & IO grid */
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 16px;
+      font-size: 11px;
+      margin-top: 8px;
+    }
+    .info-grid dt { font-weight: bold; color: #333; }
+    .info-grid dd { margin: 0; color: #555; }
+
+    /* Tree items */
+    .tree-view li { padding: 2px 0; }
+    .svc-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .svc-row .svc-name { font-weight: bold; min-width: 120px; }
+    .svc-row .svc-meta { color: #555; font-size: 11px; }
+    .svc-row .badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: #fff;
+    }
+    .badge-ok   { background: var(--ok); }
+    .badge-warn { background: var(--warn); }
+    .badge-err  { background: var(--err); }
+
+    /* Alerts */
+    .alert-list { list-style: none; padding: 0; margin: 0; }
+    .alert-list li {
+      padding: 4px 8px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .alert-list .alert-error {
+      background: #fde8e8;
+      border-left: 3px solid var(--err);
+    }
+    .alert-list .alert-warning {
+      background: #fff8e1;
+      border-left: 3px solid var(--warn);
+    }
+    #alerts-window .title-bar { background: linear-gradient(180deg, #d44, #b22); }
+    #alerts-window.all-clear .title-bar { background: linear-gradient(180deg, #4a4, #282); }
+
+    /* Log viewer */
+    #log-output {
+      width: 100%;
+      height: 280px;
+      font-family: "Lucida Console", monospace;
+      font-size: 11px;
+      background: #000;
+      color: #0f0;
+      resize: vertical;
+    }
+    .log-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .log-controls select { max-width: 200px; }
+
+    /* Quick links */
+    .quick-links { display: flex; gap: 8px; flex-wrap: wrap; }
+    .quick-links a {
+      text-decoration: none;
+    }
+
+    /* Status bar */
+    .main-status-bar {
+      max-width: 1280px;
+      margin: 8px auto 0;
+    }
+
+    /* Header bar */
+    .header-window { grid-column: 1 / -1; }
+    .header-window .window-body {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+    }
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .header-title img {
+      width: 20px; height: 20px;
+      image-rendering: pixelated;
+    }
+
+    /* Responsive */
+    @media (max-width: 800px) {
+      .desktop {
+        grid-template-columns: 1fr;
+      }
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="desktop">
+  <!-- ==================== HEADER ==================== -->
+  <div class="window header-window">
+    <div class="title-bar">
+      <div class="title-bar-text">Status Monitor</div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize"></button>
+        <button aria-label="Maximize"></button>
+        <button aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="window-body">
+      <div class="header-title">
+        <span>🖥️</span>
+        <span>zainhomelab — anosha.online</span>
+        <span class="dot dot-ok" id="global-health-dot"></span>
+        <span id="global-health-text" style="font-size:11px; color:#555;">Loading…</span>
+      </div>
+      <div class="quick-links">
+        <a href="https://app.anosha.online" target="_blank"><button>🍳 RecipeHub</button></a>
+        <a href="https://api.anosha.online/docs" target="_blank"><button>📡 RecipeHub API</button></a>
+        <a href="https://ml.anosha.online" target="_blank"><button>💡 IdeationAI</button></a>
+        <a href="https://mlapi.anosha.online/docs" target="_blank"><button>🤖 IdeationAI API</button></a>
+        <a href="http://zainhomelab:9000" target="_blank"><button>🐳 Portainer</button></a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SYSTEM STATS ==================== -->
+  <div class="window" id="system-window">
+    <div class="title-bar">
+      <div class="title-bar-text">System Resources</div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize"></button>
+        <button aria-label="Maximize"></button>
+        <button aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="window-body">
+      <div class="stats-grid">
+        <div class="stat-item">
+          <label>CPU</label>
+          <progress id="cpu-bar" max="100" value="0"></progress>
+          <div class="stat-value" id="cpu-text">—</div>
+        </div>
+        <div class="stat-item">
+          <label>Memory</label>
+          <progress id="ram-bar" max="100" value="0"></progress>
+          <div class="stat-value" id="ram-text">—</div>
+        </div>
+        <div class="stat-item">
+          <label>Disk</label>
+          <progress id="disk-bar" max="100" value="0"></progress>
+          <div class="stat-value" id="disk-text">—</div>
+        </div>
+        <div class="stat-item">
+          <label>Uptime</label>
+          <div class="stat-value" id="uptime-text">—</div>
+        </div>
+      </div>
+
+      <fieldset style="margin-top: 8px;">
+        <legend>Network & Disk I/O</legend>
+        <dl class="info-grid">
+          <dt>Net ↑</dt><dd id="net-sent">—</dd>
+          <dt>Net ↓</dt><dd id="net-recv">—</dd>
+          <dt>Disk Read</dt><dd id="disk-read">—</dd>
+          <dt>Disk Write</dt><dd id="disk-write">—</dd>
+        </dl>
+      </fieldset>
+
+      <fieldset style="margin-top: 8px;">
+        <legend>Temperatures</legend>
+        <dl class="info-grid" id="temps-grid">
+          <dt>—</dt><dd>No data</dd>
+        </dl>
+      </fieldset>
+    </div>
+  </div>
+
+  <!-- ==================== ALERTS ==================== -->
+  <div class="window all-clear" id="alerts-window">
+    <div class="title-bar">
+      <div class="title-bar-text">⚠️ Alerts</div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize"></button>
+        <button aria-label="Maximize"></button>
+        <button aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="window-body">
+      <ul class="alert-list" id="alert-list">
+        <li style="color:#555; font-size:12px;">✅ All systems operational</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ==================== PROJECTS / SERVICES ==================== -->
+  <div class="window full-width" id="projects-window">
+    <div class="title-bar">
+      <div class="title-bar-text">Projects & Services</div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize"></button>
+        <button aria-label="Maximize"></button>
+        <button aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="window-body">
+      <menu role="tablist">
+        <button aria-controls="tab-recipehub" role="tab" aria-selected="true" onclick="switchTab(this, 'tab-recipehub')">🍳 RecipeHub</button>
+        <button aria-controls="tab-ideation" role="tab" onclick="switchTab(this, 'tab-ideation')">💡 IdeationAI</button>
+        <button aria-controls="tab-infra" role="tab" onclick="switchTab(this, 'tab-infra')">🔧 Infrastructure</button>
+      </menu>
+
+      <article role="tabpanel" id="tab-recipehub">
+        <ul class="tree-view" id="tree-recipehub">
+          <li>Loading…</li>
+        </ul>
+      </article>
+
+      <article role="tabpanel" id="tab-ideation" hidden>
+        <ul class="tree-view" id="tree-ideation">
+          <li>Loading…</li>
+        </ul>
+      </article>
+
+      <article role="tabpanel" id="tab-infra" hidden>
+        <ul class="tree-view" id="tree-infra">
+          <li>Loading…</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+
+  <!-- ==================== LOG VIEWER ==================== -->
+  <div class="window full-width" id="log-window">
+    <div class="title-bar">
+      <div class="title-bar-text">📋 Log Viewer</div>
+      <div class="title-bar-controls">
+        <button aria-label="Minimize"></button>
+        <button aria-label="Maximize"></button>
+        <button aria-label="Close"></button>
+      </div>
+    </div>
+    <div class="window-body">
+      <div class="log-controls">
+        <label for="log-source">Source:</label>
+        <select id="log-source">
+          <option value="">— Select —</option>
+        </select>
+        <button id="btn-fetch-logs" onclick="fetchLogs()">📄 Fetch Logs</button>
+        <button id="btn-stream" onclick="toggleStream()">▶️ Live Stream</button>
+        <button id="btn-clear" onclick="clearLogs()">🗑️ Clear</button>
+      </div>
+      <textarea id="log-output" readonly>Select a source and click "Fetch Logs" or "Live Stream"...</textarea>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STATUS BAR ==================== -->
+<div class="status-bar main-status-bar">
+  <p class="status-bar-field" id="sb-refresh">Last refresh: —</p>
+  <p class="status-bar-field" id="sb-services">Services: —</p>
+  <p class="status-bar-field" id="sb-time"></p>
+</div>
+
+<script>
+// ===== STATE =====
+let systemData = null;
+let containersData = [];
+let pm2Data = [];
+let alertsData = [];
+let currentSSE = null;
+let streaming = false;
+
+// ===== TABS =====
+function switchTab(btn, panelId) {
+  const tabs = btn.parentElement.querySelectorAll('[role="tab"]');
+  const panels = btn.closest('.window-body').querySelectorAll('[role="tabpanel"]');
+  tabs.forEach(t => t.setAttribute('aria-selected', 'false'));
+  panels.forEach(p => p.hidden = true);
+  btn.setAttribute('aria-selected', 'true');
+  document.getElementById(panelId).hidden = false;
+}
+
+// ===== FETCH HELPERS =====
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+// ===== SYSTEM STATS =====
+async function refreshSystem() {
+  try {
+    systemData = await api('/api/system');
+    document.getElementById('cpu-bar').value = systemData.cpu_percent;
+    document.getElementById('cpu-text').textContent =
+      `${systemData.cpu_percent}% · ${systemData.cpu_count} cores` +
+      (systemData.cpu_freq_mhz ? ` · ${systemData.cpu_freq_mhz} MHz` : '');
+
+    document.getElementById('ram-bar').value = systemData.ram_percent;
+    document.getElementById('ram-text').textContent =
+      `${systemData.ram_percent}% · ${systemData.ram_used_h} / ${systemData.ram_total_h}`;
+
+    document.getElementById('disk-bar').value = systemData.disk_percent;
+    document.getElementById('disk-text').textContent =
+      `${systemData.disk_percent}% · ${systemData.disk_used_h} / ${systemData.disk_total_h}`;
+
+    document.getElementById('uptime-text').textContent = systemData.uptime_h;
+    document.getElementById('net-sent').textContent = systemData.net_sent_h;
+    document.getElementById('net-recv').textContent = systemData.net_recv_h;
+    document.getElementById('disk-read').textContent = systemData.disk_read_h;
+    document.getElementById('disk-write').textContent = systemData.disk_write_h;
+
+    // Temps
+    const tg = document.getElementById('temps-grid');
+    const temps = systemData.temps || {};
+    const keys = Object.keys(temps);
+    if (keys.length > 0) {
+      tg.innerHTML = keys.map(k =>
+        `<dt>${esc(k)}</dt><dd>${temps[k]}°C</dd>`
+      ).join('');
+    } else {
+      tg.innerHTML = '<dt>—</dt><dd>N/A</dd>';
+    }
+  } catch (e) {
+    console.error('System fetch failed:', e);
+  }
+}
+
+// ===== CONTAINERS =====
+async function refreshContainers() {
+  try {
+    containersData = await api('/api/containers');
+    renderProjects();
+    populateLogSources();
+  } catch (e) {
+    console.error('Containers fetch failed:', e);
+  }
+}
+
+// ===== PM2 =====
+async function refreshPM2() {
+  try {
+    pm2Data = await api('/api/pm2');
+    renderProjects();
+    populateLogSources();
+  } catch (e) {
+    console.error('PM2 fetch failed:', e);
+  }
+}
+
+// ===== ALERTS =====
+async function refreshAlerts() {
+  try {
+    alertsData = await api('/api/alerts');
+    const list = document.getElementById('alert-list');
+    const win = document.getElementById('alerts-window');
+
+    if (alertsData.length === 0) {
+      win.classList.add('all-clear');
+      list.innerHTML = '<li style="color:#555; font-size:12px;">✅ All systems operational</li>';
+    } else {
+      win.classList.remove('all-clear');
+      list.innerHTML = alertsData.map(a => {
+        const cls = a.level === 'error' ? 'alert-error' : 'alert-warning';
+        const icon = a.level === 'error' ? '🔴' : '🟡';
+        return `<li class="${cls}">${icon} <b>${esc(a.source)}</b> — ${esc(a.message)}</li>`;
+      }).join('');
+    }
+
+    // Global health dot
+    updateGlobalHealth();
+  } catch (e) {
+    console.error('Alerts fetch failed:', e);
+  }
+}
+
+function updateGlobalHealth() {
+  const dot = document.getElementById('global-health-dot');
+  const text = document.getElementById('global-health-text');
+  const errors = alertsData.filter(a => a.level === 'error').length;
+  const warnings = alertsData.filter(a => a.level === 'warning').length;
+
+  const totalServices = containersData.length + pm2Data.length;
+  const onlineContainers = containersData.filter(c => c.status === 'running').length;
+  const onlinePM2 = pm2Data.filter(p => p.status === 'online').length;
+  const online = onlineContainers + onlinePM2;
+
+  if (errors > 0) {
+    dot.className = 'dot dot-err';
+    text.textContent = `${errors} error(s), ${online}/${totalServices} online`;
+  } else if (warnings > 0) {
+    dot.className = 'dot dot-warn';
+    text.textContent = `${warnings} warning(s), ${online}/${totalServices} online`;
+  } else {
+    dot.className = 'dot dot-ok';
+    text.textContent = `All systems go — ${online}/${totalServices} online`;
+  }
+
+  document.getElementById('sb-services').textContent = `Services: ${online}/${totalServices} online`;
+}
+
+// ===== PROJECT TREES =====
+// Mapping of known containers/pm2 to projects
+const PROJECT_MAP = {
+  recipehub: {
+    containers: ['recipehub-be-api-1', 'recipehub-be-db-1'],
+    pm2: ['recipehub-fe'],
+    label: 'RecipeHub'
+  },
+  ideation: {
+    containers: ['ideationai-backend', 'ideationai-frontend'],
+    pm2: ['ideationai'],
+    label: 'IdeationAI'
+  }
+};
+
+function renderProjects() {
+  // RecipeHub
+  renderProjectTree('tree-recipehub', PROJECT_MAP.recipehub);
+  // IdeationAI
+  renderProjectTree('tree-ideation', PROJECT_MAP.ideation);
+  // Infrastructure (everything not in a project)
+  renderInfraTree();
+}
+
+function renderProjectTree(treeId, project) {
+  const el = document.getElementById(treeId);
+  let html = '';
+
+  // Containers
+  const containers = containersData.filter(c => project.containers.includes(c.name));
+  if (containers.length) {
+    html += '<li><details open><summary>🐳 Containers</summary><ul>';
+    containers.forEach(c => { html += renderContainerItem(c); });
+    html += '</ul></details></li>';
+  }
+
+  // PM2
+  const procs = pm2Data.filter(p => project.pm2.includes(p.name));
+  if (procs.length) {
+    html += '<li><details open><summary>⚡ PM2 Processes</summary><ul>';
+    procs.forEach(p => { html += renderPM2Item(p); });
+    html += '</ul></details></li>';
+  }
+
+  el.innerHTML = html || '<li style="color:#888;">No services found</li>';
+}
+
+function renderInfraTree() {
+  const el = document.getElementById('tree-infra');
+  const knownContainers = Object.values(PROJECT_MAP).flatMap(p => p.containers);
+  const knownPM2 = Object.values(PROJECT_MAP).flatMap(p => p.pm2);
+  const infraContainers = containersData.filter(c => !knownContainers.includes(c.name));
+  const infraPM2 = pm2Data.filter(p => !knownPM2.includes(p.name));
+
+  let html = '';
+  if (infraContainers.length) {
+    html += '<li><details open><summary>🐳 Containers</summary><ul>';
+    infraContainers.forEach(c => { html += renderContainerItem(c); });
+    html += '</ul></details></li>';
+  }
+  if (infraPM2.length) {
+    html += '<li><details open><summary>⚡ PM2 Processes</summary><ul>';
+    infraPM2.forEach(p => { html += renderPM2Item(p); });
+    html += '</ul></details></li>';
+  }
+  el.innerHTML = html || '<li style="color:#888;">No infrastructure services</li>';
+}
+
+function renderContainerItem(c) {
+  const dotClass = c.status === 'running'
+    ? (c.health === 'healthy' || c.health === 'none' ? 'dot-ok' : 'dot-warn')
+    : 'dot-err';
+  const badge = c.status === 'running' ? 'badge-ok' : 'badge-err';
+  const restarts = c.restart_count > 0
+    ? `<span class="badge badge-warn" title="Restarts">↻${c.restart_count}</span>` : '';
+  return `<li>
+    <div class="svc-row">
+      <span class="dot ${dotClass}"></span>
+      <span class="svc-name">${esc(c.name)}</span>
+      <span class="badge ${badge}">${esc(c.status)}</span>
+      ${c.health !== 'none' ? `<span class="svc-meta">${esc(c.health)}</span>` : ''}
+      ${restarts}
+      <span class="svc-meta">${esc(c.image)}</span>
+    </div>
+  </li>`;
+}
+
+function renderPM2Item(p) {
+  const dotClass = p.status === 'online' ? 'dot-ok' : 'dot-err';
+  const badge = p.status === 'online' ? 'badge-ok' : 'badge-err';
+  const restarts = p.restart_count > 0
+    ? `<span class="badge badge-warn" title="Restarts">↻${p.restart_count}</span>` : '';
+  return `<li>
+    <div class="svc-row">
+      <span class="dot ${dotClass}"></span>
+      <span class="svc-name">${esc(p.name)}</span>
+      <span class="badge ${badge}">${esc(p.status)}</span>
+      ${restarts}
+      <span class="svc-meta">CPU: ${p.cpu}% · Mem: ${p.memory_h}</span>
+    </div>
+  </li>`;
+}
+
+// ===== LOG VIEWER =====
+let logSourcesPopulated = false;
+function populateLogSources() {
+  if (logSourcesPopulated) return;
+  const sel = document.getElementById('log-source');
+  // Only populate once we have data
+  if (containersData.length === 0 && pm2Data.length === 0) return;
+  logSourcesPopulated = true;
+
+  sel.innerHTML = '<option value="">— Select —</option>';
+
+  if (containersData.length) {
+    const group = document.createElement('optgroup');
+    group.label = '🐳 Containers';
+    containersData.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = `container:${c.name}`;
+      opt.textContent = c.name;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
+  }
+
+  if (pm2Data.length) {
+    const group = document.createElement('optgroup');
+    group.label = '⚡ PM2 Processes';
+    pm2Data.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = `pm2:${p.name}`;
+      opt.textContent = p.name;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
+  }
+}
+
+async function fetchLogs() {
+  const src = document.getElementById('log-source').value;
+  if (!src) return;
+  const [type, name] = src.split(':');
+  const output = document.getElementById('log-output');
+  output.value = 'Fetching logs…';
+  try {
+    const data = await api(`/api/logs/${type}/${encodeURIComponent(name)}?lines=150`);
+    output.value = data.lines.join('\n');
+    output.scrollTop = output.scrollHeight;
+  } catch (e) {
+    output.value = `Error: ${e.message}`;
+  }
+}
+
+function toggleStream() {
+  if (streaming) {
+    stopStream();
+  } else {
+    startStream();
+  }
+}
+
+function startStream() {
+  const src = document.getElementById('log-source').value;
+  if (!src) return;
+  const [type, name] = src.split(':');
+  const output = document.getElementById('log-output');
+  const btn = document.getElementById('btn-stream');
+
+  stopStream(); // close any existing
+  output.value = '';
+  btn.textContent = '⏹️ Stop Stream';
+  streaming = true;
+
+  currentSSE = new EventSource(`/api/stream/${type}/${encodeURIComponent(name)}`);
+  currentSSE.onmessage = (e) => {
+    output.value += e.data + '\n';
+    // Keep only last 3000 lines to avoid memory issues
+    const lines = output.value.split('\n');
+    if (lines.length > 3000) {
+      output.value = lines.slice(-2000).join('\n');
+    }
+    output.scrollTop = output.scrollHeight;
+  };
+  currentSSE.onerror = () => {
+    output.value += '\n[Stream disconnected]\n';
+    stopStream();
+  };
+}
+
+function stopStream() {
+  if (currentSSE) {
+    currentSSE.close();
+    currentSSE = null;
+  }
+  streaming = false;
+  document.getElementById('btn-stream').textContent = '▶️ Live Stream';
+}
+
+function clearLogs() {
+  document.getElementById('log-output').value = '';
+}
+
+// ===== UTILITIES =====
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function updateClock() {
+  document.getElementById('sb-time').textContent =
+    new Date().toLocaleTimeString();
+}
+
+function updateRefreshTime() {
+  document.getElementById('sb-refresh').textContent =
+    `Last refresh: ${new Date().toLocaleTimeString()}`;
+}
+
+// ===== BOOT =====
+async function refreshAll() {
+  await Promise.all([
+    refreshSystem(),
+    refreshContainers(),
+    refreshPM2(),
+    refreshAlerts(),
+  ]);
+  updateRefreshTime();
+}
+
+// Initial load
+refreshAll();
+
+// Polling intervals
+setInterval(refreshSystem, 10000);      // System every 10s
+setInterval(refreshContainers, 15000);   // Containers every 15s
+setInterval(refreshPM2, 15000);          // PM2 every 15s
+setInterval(refreshAlerts, 20000);       // Alerts every 20s
+setInterval(updateClock, 1000);          // Clock every 1s
+</script>
+</body>
+</html>
