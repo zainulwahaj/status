@@ -362,11 +362,25 @@ async def health():
 # ---------------------------------------------------------------------------
 # Static files + SPA fallback
 # ---------------------------------------------------------------------------
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+FRONTEND_DIR = Path(
+    os.environ.get(
+        "FRONTEND_DIR",
+        str(Path(__file__).resolve().parent / "frontend"),
+    )
+)
+
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
     index_file = FRONTEND_DIR / "index.html"
+    if not index_file.exists():
+        return HTMLResponse(
+            "<html><body><h1>Status Monitor backend is running</h1>"
+            "<p>Frontend files were not found inside the container.</p>"
+            "</body></html>",
+            status_code=503,
+        )
     return HTMLResponse(index_file.read_text())
