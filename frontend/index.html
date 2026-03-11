@@ -205,6 +205,7 @@
         <a href="https://api.anosha.online/docs" target="_blank"><button>📡 RecipeHub API</button></a>
         <a href="https://ml.anosha.online" target="_blank"><button>💡 IdeationAI</button></a>
         <a href="https://mlapi.anosha.online/docs" target="_blank"><button>🤖 IdeationAI API</button></a>
+        <a href="https://vault.anosha.online" target="_blank"><button>🔒 SecureVault</button></a>
         <a href="http://zainhomelab:9000" target="_blank"><button>🐳 Portainer</button></a>
       </div>
     </div>
@@ -293,6 +294,7 @@
       <menu role="tablist">
         <button aria-controls="tab-recipehub" role="tab" aria-selected="true" onclick="switchTab(this, 'tab-recipehub')">🍳 RecipeHub</button>
         <button aria-controls="tab-ideation" role="tab" onclick="switchTab(this, 'tab-ideation')">💡 IdeationAI</button>
+        <button aria-controls="tab-vault" role="tab" onclick="switchTab(this, 'tab-vault')">🔒 SecureVault</button>
         <button aria-controls="tab-infra" role="tab" onclick="switchTab(this, 'tab-infra')">🔧 Infrastructure</button>
       </menu>
 
@@ -304,6 +306,12 @@
 
       <article role="tabpanel" id="tab-ideation" hidden>
         <ul class="tree-view" id="tree-ideation">
+          <li>Loading…</li>
+        </ul>
+      </article>
+
+      <article role="tabpanel" id="tab-vault" hidden>
+        <ul class="tree-view" id="tree-vault">
           <li>Loading…</li>
         </ul>
       </article>
@@ -498,6 +506,11 @@ const PROJECT_MAP = {
     containers: ['ideationai-backend', 'ideationai-frontend'],
     pm2: ['ideationai'],
     label: 'IdeationAI'
+  },
+  vault: {
+    containers: ['vault-backend', 'vault-nginx', 'vault-postgres', 'vault-redis'],
+    pm2: [],
+    label: 'SecureVault'
   }
 };
 
@@ -506,7 +519,7 @@ function renderProjects() {
   renderProjectTree('tree-recipehub', PROJECT_MAP.recipehub);
   // IdeationAI
   renderProjectTree('tree-ideation', PROJECT_MAP.ideation);
-  // Infrastructure (everything not in a project)
+  renderProjectTree('tree-vault', PROJECT_MAP.vault);
   renderInfraTree();
 }
 
